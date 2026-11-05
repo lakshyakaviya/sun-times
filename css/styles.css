@@ -1,0 +1,440 @@
+/* ------------------------------------------------------------------ *
+ * Sun Times — design tokens, base styles, layout.
+ * Light and dark are both first-class; the only switch is the OS setting.
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Palette: warm sun over a cool sky. */
+  --amber:        #f6a03a;
+  --amber-deep:   #d9752a;
+  --rose:         #e4624f;
+  --indigo:       #3b4a7a;
+  --indigo-deep:  #1d2440;
+
+  --bg:           #f4f1ea;
+  --surface:      #fffdf8;
+  --surface-sunk: #f0ebe0;
+  --text:         #241f18;
+  --text-muted:   #6c6256;
+  --border:       #e0d8c8;
+  --accent:       var(--amber-deep);
+  --accent-ink:   #4a2a08;
+  --shadow:       0 1px 2px rgba(36, 31, 24, .06), 0 8px 24px -12px rgba(36, 31, 24, .18);
+  --shadow-sm:    0 1px 2px rgba(36, 31, 24, .08);
+
+  /* Card tints */
+  --tint-sunrise: linear-gradient(160deg, #fff4e0, #ffe6c7);
+  --tint-sunset:  linear-gradient(160deg, #ffe9df, #ffd6c6);
+  --tint-golden:  linear-gradient(160deg, #fff8e6, #fdeec4);
+  --tint-day:     linear-gradient(160deg, #eef2fb, #dfe6f6);
+
+  --radius:       14px;
+  --radius-sm:    9px;
+  --gap:          clamp(.75rem, 2vw, 1.15rem);
+  --measure:      62rem;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-num: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #15161c;
+    --surface:      #1e2029;
+    --surface-sunk: #181a21;
+    --text:         #f1ece3;
+    --text-muted:   #a09a8e;
+    --border:       #2e3140;
+    --accent:       var(--amber);
+    --accent-ink:   #ffe4bd;
+    --shadow:       0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+    --shadow-sm:    0 1px 2px rgba(0, 0, 0, .35);
+
+    --tint-sunrise: linear-gradient(160deg, #3a2c1a, #2a2016);
+    --tint-sunset:  linear-gradient(160deg, #3a241f, #2a1a17);
+    --tint-golden:  linear-gradient(160deg, #352d17, #262013);
+    --tint-day:     linear-gradient(160deg, #1f2538, #1a1f2e);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Base
+ * ------------------------------------------------------------------ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  font-size: clamp(15px, .5vw + 14px, 17px);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.2; font-weight: 650; }
+p { margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Sky backdrop — a fixed wash behind everything. `data-phase` is set
+ * from the sun's current altitude at the chosen place.
+ * ------------------------------------------------------------------ */
+
+.sky {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 60vh;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, #bcd4f2 0%, #e8eef8 55%, rgba(244, 241, 234, 0) 100%);
+  transition: background 1.2s ease;
+}
+.sky[data-phase="dawn"]  { background: linear-gradient(180deg, #8fa6cf 0%, #f4c9a0 48%, rgba(244, 241, 234, 0) 100%); }
+.sky[data-phase="dusk"]  { background: linear-gradient(180deg, #6b7aa8 0%, #e9a076 45%, rgba(244, 241, 234, 0) 100%); }
+.sky[data-phase="night"] { background: linear-gradient(180deg, #2b3457 0%, #4a5478 45%, rgba(244, 241, 234, 0) 100%); }
+
+@media (prefers-color-scheme: dark) {
+  .sky                     { background: linear-gradient(180deg, #243049 0%, #1b1f2c 55%, rgba(21, 22, 28, 0) 100%); }
+  .sky[data-phase="dawn"]  { background: linear-gradient(180deg, #3b3550 0%, #6b4a33 48%, rgba(21, 22, 28, 0) 100%); }
+  .sky[data-phase="dusk"]  { background: linear-gradient(180deg, #332c45 0%, #6a3f2e 45%, rgba(21, 22, 28, 0) 100%); }
+  .sky[data-phase="night"] { background: linear-gradient(180deg, #10131f 0%, #171a26 55%, rgba(21, 22, 28, 0) 100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky { transition: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Masthead & layout
+ * ------------------------------------------------------------------ */
+
+.masthead {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 2.75rem) 16px .5rem;
+  text-align: center;
+}
+
+.masthead__title {
+  font-size: clamp(1.9rem, 6vw, 2.9rem);
+  letter-spacing: -.02em;
+}
+
+.masthead__tagline {
+  margin-top: .4rem;
+  color: var(--text-muted);
+  font-size: .95rem;
+}
+
+.layout {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--gap) 16px 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: clamp(.9rem, 2.5vw, 1.25rem);
+}
+
+.panel--flush { padding: 0; overflow: hidden; }
+
+/* ------------------------------------------------------------------ *
+ * Buttons & fields
+ * ------------------------------------------------------------------ */
+
+.btn {
+  font: inherit;
+  font-weight: 550;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .55rem .9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: background .15s ease, border-color .15s ease, transform .08s ease;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+.btn--primary {
+  color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--amber), var(--amber-deep));
+  border-color: var(--amber-deep);
+}
+.btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
+
+.btn--quiet { background: transparent; box-shadow: none; font-weight: 500; color: var(--text-muted); }
+.btn--quiet:hover:not(:disabled) { color: var(--text); }
+
+.btn--icon {
+  padding: .4rem .7rem;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+input[type="search"], input[type="date"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .55rem .75rem;
+  min-width: 0;
+}
+input[type="search"]::placeholder { color: var(--text-muted); }
+
+/* ------------------------------------------------------------------ *
+ * Picker
+ * ------------------------------------------------------------------ */
+
+.picker { position: relative; }
+
+.picker__form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: .5rem;
+}
+
+.picker__input { width: 100%; }
+
+.picker__results {
+  list-style: none;
+  margin: .6rem 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  max-height: 17rem;
+  overflow-y: auto;
+}
+
+.picker__result {
+  padding: .6rem .8rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  align-items: baseline;
+}
+.picker__result:last-child { border-bottom: 0; }
+.picker__result:hover,
+.picker__result[aria-selected="true"] { background: var(--surface-sunk); }
+
+.picker__result-where { color: var(--text-muted); font-size: .85rem; text-align: right; }
+
+.picker__status {
+  margin-top: .55rem;
+  min-height: 1.2em;
+  font-size: .88rem;
+  color: var(--text-muted);
+}
+.picker__status[data-tone="error"] { color: var(--rose); }
+
+/* ------------------------------------------------------------------ *
+ * Place + date navigation
+ * ------------------------------------------------------------------ */
+
+.place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.place__name { font-size: clamp(1.2rem, 3.5vw, 1.6rem); letter-spacing: -.01em; }
+.place__meta { margin-top: .2rem; color: var(--text-muted); font-size: .88rem; }
+
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Map
+ * ------------------------------------------------------------------ */
+
+.map {
+  height: clamp(240px, 38vh, 380px);
+  background: var(--surface-sunk);
+  /* Placeholder look until Leaflet mounts. */
+  display: grid;
+  place-items: center;
+}
+
+.map-hint {
+  padding: .55rem .9rem;
+  font-size: .85rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* ------------------------------------------------------------------ *
+ * Result cards
+ * ------------------------------------------------------------------ */
+
+.results {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(.9rem, 2.5vw, 1.15rem);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+}
+
+.card--sunrise   { background: var(--tint-sunrise); }
+.card--sunset    { background: var(--tint-sunset); }
+.card--golden    { background: var(--tint-golden); }
+.card--daylength { background: var(--tint-day); }
+
+.card__label {
+  font-size: .78rem;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card__value {
+  margin-top: .35rem;
+  font-family: var(--font-num);
+  font-size: clamp(1.6rem, 5vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.card__note {
+  margin-top: .2rem;
+  font-size: .85rem;
+  color: var(--text-muted);
+}
+
+/* The day-length card spans wider when there is room, since its value is prose-ish. */
+@media (min-width: 46rem) {
+  .card--daylength { grid-column: span 2; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Saved places
+ * ------------------------------------------------------------------ */
+
+.saved__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.saved__heading { font-size: .95rem; }
+
+.saved__list {
+  list-style: none;
+  margin: .75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+.saved__list:empty { display: none; }
+
+.saved__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .15rem;
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding-left: .2rem;
+}
+
+.saved__chip-go {
+  font: inherit;
+  font-size: .88rem;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: .35rem .5rem;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.saved__chip-go:hover { color: var(--accent); }
+
+.saved__chip-remove {
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  padding: .35rem .6rem .35rem .35rem;
+  cursor: pointer;
+  border-radius: 999px;
+  line-height: 1;
+}
+.saved__chip-remove:hover { color: var(--rose); }
+
+.saved__empty { margin-top: .6rem; font-size: .85rem; color: var(--text-muted); }
+
+/* ------------------------------------------------------------------ *
+ * Footer
+ * ------------------------------------------------------------------ */
+
+.footer {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: clamp(1.75rem, 5vw, 3rem) 16px 2.5rem;
+  text-align: center;
+  font-size: .82rem;
+  color: var(--text-muted);
+}
+
+.footer__credits { margin-top: .35rem; }
+
+/* ------------------------------------------------------------------ *
+ * Narrow screens
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 34rem) {
+  .picker__form { grid-template-columns: 1fr auto; }
+  #locate-btn { grid-column: 1 / -1; justify-self: start; }
+  .place { align-items: flex-start; }
+}
