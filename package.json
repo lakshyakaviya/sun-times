@@ -1,0 +1,13 @@
+{
+  "name": "sun-times",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sunrise, sunset, golden hour and day length for any place on Earth.",
+  "type": "module",
+  "scripts": {
+    "test": "node js/sun.test.js",
+    "serve": "python -m http.server 8000"
+  },
+  "keywords": ["sunrise", "sunset", "golden-hour", "solar"],
+  "license": "MIT"
+}
