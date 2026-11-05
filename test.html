@@ -81,8 +81,8 @@
 <header class="masthead">
   <h1 class="masthead__title">Sun Times — test suite</h1>
   <p class="masthead__tagline">
-    Checks <code>js/sun.js</code> and <code>js/time.js</code>. The same suite runs in a terminal
-    with <code>npm test</code>.
+    Checks <code>js/sun.js</code>, <code>js/time.js</code> and <code>js/format.js</code>. The same
+    suites run in a terminal with <code>npm test</code>.
   </p>
 </header>
 
@@ -115,7 +115,18 @@
 </footer>
 
 <script type="module">
-import { runTests } from './js/sun.test.js';
+import { runTests as runSolarTests } from './js/sun.test.js';
+import { runTests as runFormatTests } from './js/format.test.js';
+
+/** Both suites, as one list. */
+function runTests() {
+  const solar = runSolarTests();
+  const format = runFormatTests();
+  const results = [...solar.results, ...format.results];
+  const passed = solar.passed + format.passed;
+  const failed = solar.failed + format.failed;
+  return { results, passed, failed, total: results.length };
+}
 
 const summaryEl = document.getElementById('summary');
 const countEl = document.getElementById('summary-count');

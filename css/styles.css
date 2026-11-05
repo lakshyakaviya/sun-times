@@ -296,6 +296,11 @@ input[type="search"]::placeholder { color: var(--text-muted); }
   place-items: center;
 }
 
+.map__placeholder {
+  font-size: .88rem;
+  color: var(--text-muted);
+}
+
 .map-hint {
   padding: .55rem .9rem;
   font-size: .85rem;

@@ -21,7 +21,9 @@
 
 <main class="layout">
 
-  <!-- Place picker: search, geolocation. The map below is a third way in. -->
+  <!-- Place picker: search, geolocation. The map below is a third way in.
+       The controls are disabled until js/places.js can answer them — visible,
+       so the layout is reviewable, but plainly inert rather than silently so. -->
   <section class="panel picker" aria-label="Choose a place">
     <form class="picker__form" id="search-form" role="search" novalidate>
       <label class="visually-hidden" for="search-input">Search for a city or town</label>
@@ -36,15 +38,16 @@
         role="combobox"
         aria-expanded="false"
         aria-controls="search-results"
-        aria-autocomplete="list">
-      <button class="btn btn--primary" type="submit" id="search-btn">Search</button>
-      <button class="btn" type="button" id="locate-btn">
+        aria-autocomplete="list"
+        disabled>
+      <button class="btn btn--primary" type="submit" id="search-btn" disabled>Search</button>
+      <button class="btn" type="button" id="locate-btn" disabled>
         <span aria-hidden="true">◎</span> Use my location
       </button>
     </form>
 
     <ul class="picker__results" id="search-results" role="listbox" aria-label="Search results" hidden></ul>
-    <p class="picker__status" id="picker-status" role="status"></p>
+    <p class="picker__status" id="picker-status" role="status">Search and location are wired up in the next step.</p>
   </section>
 
   <!-- Current place and the date being shown. -->
@@ -65,7 +68,9 @@
 
   <!-- Leaflet mounts here (wired up in a later step). -->
   <section class="panel panel--flush map-panel" aria-label="Map">
-    <div class="map" id="map" role="application" aria-describedby="map-hint"></div>
+    <div class="map" id="map" role="application" aria-describedby="map-hint">
+      <p class="map__placeholder">The map arrives in a later step.</p>
+    </div>
     <p class="map-hint" id="map-hint">Click anywhere on the map, or drag the marker, to pick that spot.</p>
   </section>
 
@@ -113,6 +118,8 @@
   </section>
 
 </main>
+
+<script type="module" src="js/app.js"></script>
 
 <footer class="footer">
   <p>
