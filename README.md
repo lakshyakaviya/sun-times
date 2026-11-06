@@ -1,11 +1,16 @@
 # Sun Times
 
+**[lakshyakaviya.github.io/sun-times](https://lakshyakaviya.github.io/sun-times/)**
+
 Sunrise, sunset, golden hour and day length for any place on Earth — in that
 place's own local time. Pick somewhere by searching for a city, clicking the
 map, or using your browser's location.
 
 Plain HTML, CSS and ES modules. No build step, no bundler, no dependencies, no
 API keys, no analytics.
+
+The [test suite](https://lakshyakaviya.github.io/sun-times/test.html) runs in
+the browser too.
 
 ## Running it
 
