@@ -1,16 +1,14 @@
 /**
- * Wiring: state, rendering, and the date controls.
+ * Wiring: state, rendering, the place picker and the date controls.
  *
  * The app has two halves that meet at a narrow seam — something decides
  * *where*, and this file turns a where plus a when into what you see:
  *
  *   { lat, lon, timeZone, name }  →  computed sun times  →  the page
  *
- * Only the left-hand side is still scaffolded. `FIXED_PLACE` below stands in
- * for the search box, the map and geolocation, so the display path can be
- * built and checked against known values with no network and no permission
- * prompts in the way. Later steps replace that constant with a real picker and
- * nothing here needs to change.
+ * The search box and the location button both funnel into `setPlace`, so the
+ * rendering below neither knows nor cares which was used. The map will join
+ * them on the same footing.
  */
 
 import {
@@ -22,7 +20,14 @@ import {
   addDays,
 } from './sun.js';
 
-import { civilDateInZone } from './time.js';
+import { civilDateInZone, viewerTimeZone } from './time.js';
+
+import {
+  searchPlaces,
+  resolveTimeZone,
+  locate,
+  MIN_QUERY_LENGTH,
+} from './places.js';
 
 import {
   formatTimeWithDay,
@@ -36,22 +41,16 @@ import {
   dayMarker,
 } from './format.js';
 
-/**
- * Scaffolding, removed once the picker exists. Bengaluru is a useful stand-in
- * because +5:30 is not a whole number of hours, so a careless offset shows up
- * immediately.
- */
-const FIXED_PLACE = {
-  name: 'Bengaluru',
-  region: 'Karnataka, India',
-  lat: 12.9716,
-  lon: 77.5946,
-  timeZone: 'Asia/Kolkata',
-};
-
 const state = {
-  place: FIXED_PLACE,
-  date: civilDateInZone(Date.now(), FIXED_PLACE.timeZone),
+  /** `null` until a place has been picked. */
+  place: null,
+  date: civilDateInZone(Date.now(), viewerTimeZone()),
+  /**
+   * Whether the date on screen was asked for, or is just "today". Picking a
+   * new place keeps a date you chose, but re-reads today from the new zone —
+   * Tokyo at 02:00 is already tomorrow by London's reckoning.
+   */
+  dateIsExplicit: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -64,6 +63,11 @@ const dom = {
   prevDay: el('prev-day'),
   nextDay: el('next-day'),
   today: el('today-btn'),
+  searchForm: el('search-form'),
+  searchInput: el('search-input'),
+  locateBtn: el('locate-btn'),
+  searchResults: el('search-results'),
+  pickerStatus: el('picker-status'),
   cards: {
     sunrise: { value: el('sunrise-value'), note: el('sunrise-note') },
     sunset: { value: el('sunset-value'), note: el('sunset-note') },
@@ -102,11 +106,31 @@ function renderPlace() {
   const bits = [];
   if (place.region) bits.push(place.region);
   bits.push(formatCoordinates(place.lat, place.lon));
-  bits.push(`times in ${formatZoneLabel(now, place.timeZone)}`);
+  // Be honest when the zone could not be established: the app's whole premise
+  // is that times are on the clock of the place you picked.
+  bits.push(
+    place.zoneIsGuess
+      ? `time zone unknown — times in your own, ${formatZoneLabel(now, place.timeZone)}`
+      : `times in ${formatZoneLabel(now, place.timeZone)}`
+  );
   dom.placeMeta.textContent = bits.join(' · ');
 
   dom.dateInput.value = toISODate(date);
   dom.dateInput.setAttribute('aria-label', `Date — showing ${formatDateLabel(date)}`);
+}
+
+/** Before anything has been picked: no values, no invented default place. */
+function renderEmptyState() {
+  dom.placeName.textContent = 'No place chosen yet';
+  dom.placeMeta.textContent =
+    'Search for a city or use your location to see sunrise, sunset and golden hour.';
+  dom.dateInput.value = toISODate(state.date);
+
+  for (const card of Object.values(dom.cards)) {
+    card.value.textContent = '—';
+    card.note.textContent = '';
+  }
+  dom.sky.dataset.phase = 'day';
 }
 
 function renderCards(sun, delta) {
@@ -195,6 +219,7 @@ function renderCards(sun, delta) {
  */
 function renderSky() {
   const { place } = state;
+  if (!place) return;
   const { altitude, azimuth } = sunPosition(Date.now(), place.lat, place.lon);
 
   let phase;
@@ -207,8 +232,17 @@ function renderSky() {
 
 function render() {
   const { place, date } = state;
-  const sun = sunTimes(date, place.lat, place.lon, place.timeZone);
-  const delta = dayLengthDelta(date, place.lat, place.lon, place.timeZone);
+
+  if (!place) {
+    renderEmptyState();
+    return;
+  }
+
+  // An unverified zone must not anchor the solar day — fall back to the
+  // longitude, which needs no zone database.
+  const anchorZone = place.zoneIsGuess ? undefined : place.timeZone;
+  const sun = sunTimes(date, place.lat, place.lon, anchorZone);
+  const delta = dayLengthDelta(date, place.lat, place.lon, anchorZone);
 
   renderPlace();
   renderCards(sun, delta);
@@ -241,7 +275,231 @@ export function setDate(civilDate) {
  */
 export function setPlace(place) {
   state.place = place;
+  // A date the viewer asked for survives the change of place; a date that was
+  // only ever "today" is re-read from the new zone.
+  if (!state.dateIsExplicit) {
+    state.date = civilDateInZone(Date.now(), place.timeZone);
+  }
   render();
+}
+
+/* ------------------------------------------------------------------ *
+ * The place picker
+ * ------------------------------------------------------------------ */
+
+const SEARCH_DEBOUNCE_MS = 250;
+
+/** The in-flight search, so a superseded one can be abandoned. */
+let searchController = null;
+let debounceTimer = 0;
+let offered = [];
+let activeIndex = -1;
+
+function setStatus(message, tone) {
+  dom.pickerStatus.textContent = message;
+  if (tone) dom.pickerStatus.dataset.tone = tone;
+  else delete dom.pickerStatus.dataset.tone;
+}
+
+function closeResults() {
+  offered = [];
+  activeIndex = -1;
+  dom.searchResults.replaceChildren();
+  dom.searchResults.hidden = true;
+  dom.searchInput.setAttribute('aria-expanded', 'false');
+  dom.searchInput.removeAttribute('aria-activedescendant');
+}
+
+function highlight(index) {
+  activeIndex = index;
+  const options = [...dom.searchResults.children];
+  options.forEach((option, at) => {
+    const isActive = at === index;
+    option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    if (isActive) {
+      dom.searchInput.setAttribute('aria-activedescendant', option.id);
+      option.scrollIntoView({ block: 'nearest' });
+    }
+  });
+  if (index < 0) dom.searchInput.removeAttribute('aria-activedescendant');
+}
+
+function choose(place) {
+  closeResults();
+  dom.searchInput.value = place.name;
+  setStatus('');
+  setPlace(place);
+}
+
+function showResults(places) {
+  offered = places;
+  activeIndex = -1;
+
+  const options = places.map((place, index) => {
+    const option = document.createElement('li');
+    option.className = 'picker__result';
+    option.id = `search-result-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+
+    const name = document.createElement('span');
+    name.textContent = place.name;
+
+    const where = document.createElement('span');
+    where.className = 'picker__result-where';
+    where.textContent = place.region;
+
+    option.append(name, where);
+    // mousedown, not click: it fires before the input loses focus, so the
+    // list is still open when the choice is made.
+    option.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      choose(place);
+    });
+    return option;
+  });
+
+  dom.searchResults.replaceChildren(...options);
+  dom.searchResults.hidden = false;
+  dom.searchInput.setAttribute('aria-expanded', 'true');
+}
+
+async function runSearch(query) {
+  // Abandon whatever was already in flight. Without this, a slow response to
+  // "Lon" can arrive after a fast one to "London" and replace it.
+  searchController?.abort();
+  const controller = new AbortController();
+  searchController = controller;
+
+  setStatus('Searching…');
+
+  try {
+    const places = await searchPlaces(query, { signal: controller.signal });
+    if (controller !== searchController) return; // superseded while awaiting
+
+    if (!places.length) {
+      closeResults();
+      setStatus(`Nothing found for “${query}”. Try a different spelling.`);
+      return;
+    }
+
+    showResults(places);
+    setStatus(
+      places.length === 1
+        ? '1 match — press Enter to choose it.'
+        : `${places.length} matches — use the arrow keys, then Enter.`
+    );
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    closeResults();
+    setStatus(error?.message ?? 'The search did not work. Try again.', 'error');
+  }
+}
+
+function onSearchInput() {
+  clearTimeout(debounceTimer);
+  const query = dom.searchInput.value.trim();
+
+  if (query.length < MIN_QUERY_LENGTH) {
+    searchController?.abort();
+    closeResults();
+    setStatus('');
+    return;
+  }
+
+  debounceTimer = setTimeout(() => runSearch(query), SEARCH_DEBOUNCE_MS);
+}
+
+function onSearchKeydown(event) {
+  if (event.key === 'Escape') {
+    closeResults();
+    setStatus('');
+    return;
+  }
+
+  if (!offered.length) return;
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    highlight((activeIndex + 1) % offered.length);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    highlight(activeIndex <= 0 ? offered.length - 1 : activeIndex - 1);
+  } else if (event.key === 'Enter' && activeIndex >= 0) {
+    event.preventDefault();
+    choose(offered[activeIndex]);
+  }
+}
+
+function onSearchSubmit(event) {
+  event.preventDefault();
+  clearTimeout(debounceTimer);
+
+  // Enter with a highlighted option takes it; otherwise search immediately
+  // rather than waiting out the debounce.
+  if (activeIndex >= 0 && offered[activeIndex]) {
+    choose(offered[activeIndex]);
+    return;
+  }
+
+  const query = dom.searchInput.value.trim();
+  if (query.length < MIN_QUERY_LENGTH) {
+    setStatus(`Type at least ${MIN_QUERY_LENGTH} characters to search.`);
+    return;
+  }
+  runSearch(query);
+}
+
+async function runLocate() {
+  dom.locateBtn.disabled = true;
+  closeResults();
+  setStatus('Finding your location…');
+
+  try {
+    const { lat, lon } = await locate();
+
+    setStatus('Working out the time zone there…');
+    const { timeZone, guessed } = await resolveTimeZone(lat, lon);
+
+    setPlace({
+      // Turning coordinates into a place name needs a reverse geocoder, which
+      // arrives with the map. Until then the coordinates in the meta line say
+      // where this is.
+      name: 'Your location',
+      region: '',
+      lat,
+      lon,
+      timeZone,
+      zoneIsGuess: guessed,
+      source: 'geolocation',
+    });
+
+    setStatus(
+      guessed
+        ? 'Found you, but the time zone lookup failed — times are in your own zone.'
+        : ''
+    );
+  } catch (error) {
+    setStatus(error?.message ?? 'Could not get your location.', 'error');
+  } finally {
+    dom.locateBtn.disabled = false;
+  }
+}
+
+function wirePicker() {
+  // Own the closed state rather than inheriting it from the markup, so the
+  // attributes and the variables above can never start out disagreeing.
+  closeResults();
+
+  dom.searchInput.addEventListener('input', onSearchInput);
+  dom.searchInput.addEventListener('keydown', onSearchKeydown);
+  dom.searchForm.addEventListener('submit', onSearchSubmit);
+  dom.locateBtn.addEventListener('click', runLocate);
+
+  // Dismiss the list when attention moves elsewhere on the page.
+  document.addEventListener('click', (event) => {
+    if (!dom.searchResults.hidden && !event.target.closest?.('.picker')) closeResults();
+  });
 }
 
 function wireDateControls() {
@@ -250,7 +508,9 @@ function wireDateControls() {
 
   dom.dateInput.addEventListener('change', () => {
     try {
-      setDate(civilDateFromISO(dom.dateInput.value));
+      const chosen = civilDateFromISO(dom.dateInput.value);
+      state.dateIsExplicit = true;
+      setDate(chosen);
     } catch {
       // Cleared or half-typed: put the current date back rather than blanking
       // the whole page.
@@ -258,11 +518,20 @@ function wireDateControls() {
     }
   });
 
-  dom.prevDay.addEventListener('click', () => setDate(addDays(state.date, -1)));
-  dom.nextDay.addEventListener('click', () => setDate(addDays(state.date, 1)));
-  dom.today.addEventListener('click', () =>
-    setDate(civilDateInZone(Date.now(), state.place.timeZone))
-  );
+  dom.prevDay.addEventListener('click', () => {
+    state.dateIsExplicit = true;
+    setDate(addDays(state.date, -1));
+  });
+
+  dom.nextDay.addEventListener('click', () => {
+    state.dateIsExplicit = true;
+    setDate(addDays(state.date, 1));
+  });
+
+  dom.today.addEventListener('click', () => {
+    state.dateIsExplicit = false;
+    setDate(civilDateInZone(Date.now(), state.place?.timeZone ?? viewerTimeZone()));
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -270,6 +539,7 @@ function wireDateControls() {
  * ------------------------------------------------------------------ */
 
 wireDateControls();
+wirePicker();
 render();
 
 // Keep the backdrop honest as the day goes on. Only the sky changes, so this
