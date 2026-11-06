@@ -82,8 +82,8 @@
   <h1 class="masthead__title">Sun Times — test suite</h1>
   <p class="masthead__tagline">
     Checks <code>js/sun.js</code>, <code>js/time.js</code>, <code>js/format.js</code>,
-    <code>js/places.js</code> and <code>js/map.js</code>. The same suites run in a terminal with
-    <code>npm test</code>.
+    <code>js/places.js</code>, <code>js/map.js</code> and <code>js/store.js</code>. The same
+    suites run in a terminal with <code>npm test</code>.
   </p>
 </header>
 
@@ -120,6 +120,7 @@ import { runTests as runSolarTests } from './js/sun.test.js';
 import { runTests as runFormatTests } from './js/format.test.js';
 import { runTests as runPlacesTests } from './js/places.test.js';
 import { runTests as runMapTests } from './js/map.test.js';
+import { runTests as runStoreTests } from './js/store.test.js';
 
 /** Every suite, as one list. Some stub fetch or Leaflet, so they are async. */
 async function runTests() {
@@ -128,6 +129,7 @@ async function runTests() {
     await runFormatTests(),
     await runPlacesTests(),
     await runMapTests(),
+    await runStoreTests(),
   ];
   return {
     results: suites.flatMap((suite) => suite.results),

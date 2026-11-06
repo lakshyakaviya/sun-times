@@ -435,6 +435,14 @@ input[type="search"]::placeholder { color: var(--text-muted); }
   padding-left: .2rem;
 }
 
+/* The place on screen, so the row shows where you are as well as where you
+   can go. Border and weight rather than colour alone. */
+.saved__chip[data-current="true"] {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.saved__chip[data-current="true"] .saved__chip-go { font-weight: 650; }
+
 .saved__chip-go {
   font: inherit;
   font-size: .88rem;

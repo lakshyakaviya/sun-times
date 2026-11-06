@@ -5,7 +5,7 @@
   "description": "Sunrise, sunset, golden hour and day length for any place on Earth.",
   "type": "module",
   "scripts": {
-    "test": "node js/sun.test.js && node js/format.test.js && node js/places.test.js && node js/map.test.js",
+    "test": "node js/sun.test.js && node js/format.test.js && node js/places.test.js && node js/map.test.js && node js/store.test.js",
     "serve": "python -m http.server 8000"
   },
   "keywords": ["sunrise", "sunset", "golden-hour", "solar"],

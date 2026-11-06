@@ -33,6 +33,20 @@ import {
 import { createMap } from './map.js';
 
 import {
+  detectStorage,
+  readSavedPlaces,
+  writeSavedPlaces,
+  readLastPlace,
+  writeLastPlace,
+  addSavedPlace,
+  removeSavedPlace,
+  samePlace,
+  parseUrlState,
+  buildUrlQuery,
+  MAX_SAVED,
+} from './store.js';
+
+import {
   formatTimeWithDay,
   formatTimeRange,
   formatDuration,
@@ -54,7 +68,12 @@ const state = {
    * Tokyo at 02:00 is already tomorrow by London's reckoning.
    */
   dateIsExplicit: false,
+  /** Pinned places, in the order they were pinned. */
+  saved: [],
 };
+
+/** `null` where the browser will not let the page store anything. */
+const storage = detectStorage();
 
 const el = (id) => document.getElementById(id);
 
@@ -73,6 +92,9 @@ const dom = {
   pickerStatus: el('picker-status'),
   map: el('map'),
   mapPlaceholder: el('map-placeholder'),
+  saveBtn: el('save-btn'),
+  savedList: el('saved-list'),
+  savedEmpty: el('saved-empty'),
   cards: {
     sunrise: { value: el('sunrise-value'), note: el('sunrise-note') },
     sunset: { value: el('sunset-value'), note: el('sunset-note') },
@@ -235,23 +257,144 @@ function renderSky() {
   dom.sky.dataset.phase = phase;
 }
 
-function render() {
-  const { place, date } = state;
+/* ------------------------------------------------------------------ *
+ * Pinned places
+ * ------------------------------------------------------------------ */
 
-  if (!place) {
-    renderEmptyState();
+/** One chip: a button to go there, and a button to let it go. */
+function chipFor(entry) {
+  const label = entry.name || formatCoordinates(entry.lat, entry.lon);
+
+  const item = document.createElement('li');
+  item.className = 'saved__chip';
+  // So the row shows at a glance which pin you are looking at.
+  if (samePlace(entry, state.place)) {
+    item.dataset.current = 'true';
+    item.setAttribute('aria-current', 'true');
+  }
+
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.className = 'saved__chip-go';
+  go.textContent = label;
+  if (entry.region) go.title = entry.region;
+  go.addEventListener('click', () => {
+    closeResults();
+    // The search box said where we came from, not where we are going.
+    dom.searchInput.value = '';
+    setStatus('');
+    setPlace({ ...entry, name: label });
+  });
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'saved__chip-remove';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', `Unpin ${label}`);
+  remove.addEventListener('click', () => {
+    state.saved = removeSavedPlace(state.saved, entry);
+    persistSaved();
+    renderSaved();
+  });
+
+  item.append(go, remove);
+  return item;
+}
+
+function renderSaved() {
+  const { saved, place } = state;
+  const pinned = Boolean(place) && saved.some((entry) => samePlace(entry, place));
+
+  dom.saveBtn.disabled = !place;
+  dom.saveBtn.textContent = pinned ? 'Unpin this place' : 'Pin this place';
+  dom.saveBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+
+  dom.savedList.replaceChildren(...saved.map(chipFor));
+  dom.savedEmpty.hidden = saved.length > 0;
+}
+
+/** Store the pinned list, and own up if the browser will not have it. */
+function persistSaved() {
+  if (state.saved.length && !writeSavedPlaces(storage, state.saved)) {
+    setStatus('Pinned for this visit only — this browser will not let the page store anything.');
+  }
+}
+
+function togglePin() {
+  const { place } = state;
+  if (!place) return;
+
+  if (state.saved.some((entry) => samePlace(entry, place))) {
+    state.saved = removeSavedPlace(state.saved, place);
+    persistSaved();
+    renderSaved();
     return;
   }
 
-  // An unverified zone must not anchor the solar day — fall back to the
-  // longitude, which needs no zone database.
-  const anchorZone = place.zoneIsGuess ? undefined : place.timeZone;
-  const sun = sunTimes(date, place.lat, place.lon, anchorZone);
-  const delta = dayLengthDelta(date, place.lat, place.lon, anchorZone);
+  const { places, added, reason } = addSavedPlace(state.saved, place);
+  if (!added) {
+    // 'full' is the only reason a real place gets refused here.
+    setStatus(
+      reason === 'full'
+        ? `That is ${MAX_SAVED} pinned places — unpin one before pinning another.`
+        : 'That place cannot be pinned.'
+    );
+    return;
+  }
 
-  renderPlace();
-  renderCards(sun, delta);
-  renderSky();
+  state.saved = places;
+  persistSaved();
+  renderSaved();
+}
+
+/* ------------------------------------------------------------------ *
+ * The URL
+ * ------------------------------------------------------------------ */
+
+/**
+ * Mirror the view into the address bar, so it survives a reload and can be
+ * pasted to someone else.
+ *
+ * `replaceState`, not `pushState`: stepping through a week with the arrows
+ * would otherwise stack up history entries, and the back button would spend
+ * seven presses getting out of the page instead of leaving it.
+ */
+function syncUrl() {
+  const { location, history } = globalThis;
+  if (!location || typeof history?.replaceState !== 'function') return;
+
+  const query = buildUrlQuery({
+    place: state.place,
+    date: state.dateIsExplicit ? state.date : null,
+  });
+
+  try {
+    history.replaceState(null, '', `${location.pathname}${query}${location.hash}`);
+  } catch {
+    // Some browsers refuse this on a `file://` page. Nothing depends on the
+    // URL having been written.
+  }
+}
+
+function render() {
+  const { place, date } = state;
+
+  if (place) {
+    // An unverified zone must not anchor the solar day — fall back to the
+    // longitude, which needs no zone database.
+    const anchorZone = place.zoneIsGuess ? undefined : place.timeZone;
+    const sun = sunTimes(date, place.lat, place.lon, anchorZone);
+    const delta = dayLengthDelta(date, place.lat, place.lon, anchorZone);
+
+    renderPlace();
+    renderCards(sun, delta);
+    renderSky();
+  } else {
+    renderEmptyState();
+  }
+
+  renderSaved();
+  syncUrl();
 }
 
 /* ------------------------------------------------------------------ *
@@ -288,6 +431,9 @@ export function setPlace(place) {
   // However the place arrived, the marker follows it, so the map, the search
   // box and the header never disagree about where we are.
   mapHandle?.moveTo(place.lat, place.lon);
+  // Remembered for the next visit. Not the date, though: a date chosen a week
+  // ago is stale on arrival, where a place is not.
+  writeLastPlace(storage, place);
   render();
 }
 
@@ -614,12 +760,46 @@ function wireDateControls() {
   });
 }
 
+function wireSaved() {
+  dom.saveBtn.addEventListener('click', togglePin);
+}
+
 /* ------------------------------------------------------------------ *
  * Start
  * ------------------------------------------------------------------ */
 
+/**
+ * Pick up where the last visit left off, or where a shared link points.
+ *
+ * Order matters: a link someone was *sent* has to beat whatever this browser
+ * happens to remember, or following a link to Tokyo would show you Bangalore.
+ * Geolocation is deliberately not in this chain — a permission prompt nobody
+ * asked for is a bad way to open a page.
+ */
+function restoreState() {
+  state.saved = readSavedPlaces(storage);
+
+  const fromUrl = parseUrlState(globalThis.location?.search ?? '');
+  if (fromUrl.date) {
+    state.date = fromUrl.date;
+    state.dateIsExplicit = true;
+  }
+
+  const place = fromUrl.place ?? readLastPlace(storage);
+  if (!place) return;
+
+  state.place = { ...place, name: place.name || 'Selected point' };
+  // Same rule as `setPlace`: a date nobody asked for is read from the zone of
+  // the place now on screen.
+  if (!state.dateIsExplicit) {
+    state.date = civilDateInZone(Date.now(), state.place.timeZone);
+  }
+}
+
 wireDateControls();
 wirePicker();
+wireSaved();
+restoreState();
 render();
 
 // Leaflet is loaded with `defer`, so it is ready by the time a module script

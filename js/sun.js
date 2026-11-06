@@ -53,11 +53,37 @@ export const ALTITUDE = {
  * Civil date helpers
  * ------------------------------------------------------------------ */
 
-/** `'2026-11-05'` → `{ year: 2026, month: 11, day: 5 }` */
+/**
+ * `'2026-11-05'` → `{ year: 2026, month: 11, day: 5 }`
+ *
+ * Throws unless the date both looks right and exists. The shape alone is not
+ * enough: `2026-13-45` matches the pattern, and `2026-02-30` matches the
+ * pattern *and* has a plausible month. Either would otherwise be carried into
+ * the solar maths, which would answer for some other day without complaint.
+ */
 export function civilDateFromISO(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).trim());
   if (!match) throw new RangeError(`Not an ISO date: ${iso}`);
-  return { year: +match[1], month: +match[2], day: +match[3] };
+
+  const year = +match[1];
+  const month = +match[2];
+  const day = +match[3];
+
+  // A round trip through the calendar settles existence: the date machinery
+  // rolls an overflowing day into the next month, so a date that comes back
+  // unchanged is one that is really there. (`setUTCFullYear` rather than
+  // `Date.UTC`, which would read a year below 100 as 19xx.)
+  const probe = new Date(0);
+  probe.setUTCFullYear(year, month - 1, day);
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() + 1 !== month ||
+    probe.getUTCDate() !== day
+  ) {
+    throw new RangeError(`Not a real date: ${iso}`);
+  }
+
+  return { year, month, day };
 }
 
 /** `{ year: 2026, month: 11, day: 5 }` → `'2026-11-05'` */
