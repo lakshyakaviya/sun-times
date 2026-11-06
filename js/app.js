@@ -25,9 +25,12 @@ import { civilDateInZone, viewerTimeZone } from './time.js';
 import {
   searchPlaces,
   resolveTimeZone,
+  describePlace,
   locate,
   MIN_QUERY_LENGTH,
 } from './places.js';
+
+import { createMap } from './map.js';
 
 import {
   formatTimeWithDay,
@@ -68,6 +71,8 @@ const dom = {
   locateBtn: el('locate-btn'),
   searchResults: el('search-results'),
   pickerStatus: el('picker-status'),
+  map: el('map'),
+  mapPlaceholder: el('map-placeholder'),
   cards: {
     sunrise: { value: el('sunrise-value'), note: el('sunrise-note') },
     sunset: { value: el('sunset-value'), note: el('sunset-note') },
@@ -280,6 +285,9 @@ export function setPlace(place) {
   if (!state.dateIsExplicit) {
     state.date = civilDateInZone(Date.now(), place.timeZone);
   }
+  // However the place arrived, the marker follows it, so the map, the search
+  // box and the header never disagree about where we are.
+  mapHandle?.moveTo(place.lat, place.lon);
   render();
 }
 
@@ -450,6 +458,60 @@ function onSearchSubmit(event) {
   runSearch(query);
 }
 
+/* ------------------------------------------------------------------ *
+ * Coordinates with no name attached
+ * ------------------------------------------------------------------ */
+
+/** The pick being resolved, so a quick second click abandons the first. */
+let pickController = null;
+
+/**
+ * Turn a bare pair of coordinates into a place and show it.
+ *
+ * Both lookups go out together and the page is updated once, when they land.
+ * Rendering immediately would mean showing times on the wrong clock — the zone
+ * is not known yet — and then having them jump a moment later.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @param {{fallbackName: string, working: string}} labels
+ */
+async function adoptCoordinates(lat, lon, { fallbackName, working }) {
+  pickController?.abort();
+  const controller = new AbortController();
+  pickController = controller;
+
+  setStatus(working);
+
+  try {
+    const [zone, description] = await Promise.all([
+      resolveTimeZone(lat, lon, { signal: controller.signal }),
+      describePlace(lat, lon, { signal: controller.signal }),
+    ]);
+
+    if (controller !== pickController) return; // a newer pick is in flight
+
+    setPlace({
+      name: description.name || fallbackName,
+      region: description.region,
+      lat,
+      lon,
+      timeZone: zone.timeZone,
+      zoneIsGuess: zone.guessed,
+      source: 'coordinates',
+    });
+
+    setStatus(
+      zone.guessed
+        ? 'The time zone lookup failed — times are in your own zone, not this place’s.'
+        : ''
+    );
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    setStatus(error?.message ?? 'Could not work out what is at that spot.', 'error');
+  }
+}
+
 async function runLocate() {
   dom.locateBtn.disabled = true;
   closeResults();
@@ -457,33 +519,51 @@ async function runLocate() {
 
   try {
     const { lat, lon } = await locate();
-
-    setStatus('Working out the time zone there…');
-    const { timeZone, guessed } = await resolveTimeZone(lat, lon);
-
-    setPlace({
-      // Turning coordinates into a place name needs a reverse geocoder, which
-      // arrives with the map. Until then the coordinates in the meta line say
-      // where this is.
-      name: 'Your location',
-      region: '',
-      lat,
-      lon,
-      timeZone,
-      zoneIsGuess: guessed,
-      source: 'geolocation',
+    await adoptCoordinates(lat, lon, {
+      // Only used where the reverse lookup comes back with nothing — mid-ocean,
+      // or if the service is down.
+      fallbackName: 'Your location',
+      working: 'Found you. Working out the time zone…',
     });
-
-    setStatus(
-      guessed
-        ? 'Found you, but the time zone lookup failed — times are in your own zone.'
-        : ''
-    );
   } catch (error) {
     setStatus(error?.message ?? 'Could not get your location.', 'error');
   } finally {
     dom.locateBtn.disabled = false;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * The map
+ * ------------------------------------------------------------------ */
+
+let mapHandle = null;
+
+function handleMapPick(lat, lon) {
+  closeResults();
+  dom.searchInput.value = '';
+  adoptCoordinates(lat, lon, {
+    fallbackName: 'Selected point',
+    working: 'Working out what is there…',
+  });
+}
+
+function initMap() {
+  mapHandle = createMap(dom.map, {
+    onPick: handleMapPick,
+    place: state.place ?? undefined,
+  });
+
+  if (!mapHandle) {
+    // Leaflet never arrived. Say so where the map would have been, and leave
+    // the rest of the app alone — search and your location still work, and the
+    // sun maths never needed the network.
+    dom.mapPlaceholder.textContent =
+      'The map could not be loaded. Search for a city or use your location instead.';
+    return;
+  }
+
+  // Leaflet has taken over the container, so the placeholder can go.
+  dom.mapPlaceholder.remove();
 }
 
 function wirePicker() {
@@ -541,6 +621,10 @@ function wireDateControls() {
 wireDateControls();
 wirePicker();
 render();
+
+// Leaflet is loaded with `defer`, so it is ready by the time a module script
+// runs — but check rather than assume, and treat its absence as ordinary.
+initMap();
 
 // Keep the backdrop honest as the day goes on. Only the sky changes, so this
 // does no real work.

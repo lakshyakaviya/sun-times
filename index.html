@@ -8,6 +8,13 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f6a03a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='9' fill='%23f6a03a'/></svg>">
+<!-- Leaflet, pinned to an exact version with integrity hashes taken from
+     cdnjs. If this fails to load the app drops the map and carries on. -->
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+      integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -63,12 +70,16 @@
     </div>
   </section>
 
-  <!-- Leaflet mounts here (wired up in a later step). -->
+  <!-- Leaflet mounts into #map; the placeholder shows until it does, and
+       stays with a message if the library never arrives. -->
   <section class="panel panel--flush map-panel" aria-label="Map">
-    <div class="map" id="map" role="application" aria-describedby="map-hint">
-      <p class="map__placeholder">The map arrives in a later step.</p>
+    <div class="map" id="map" aria-describedby="map-hint">
+      <p class="map__placeholder" id="map-placeholder">Loading the map…</p>
     </div>
-    <p class="map-hint" id="map-hint">Click anywhere on the map, or drag the marker, to pick that spot.</p>
+    <p class="map-hint" id="map-hint">
+      Click anywhere on the map, or drag the marker, to pick that spot. Using a keyboard?
+      Search for a city or use your location instead.
+    </p>
   </section>
 
   <!-- Results. Values are filled in by js/app.js. -->
@@ -116,6 +127,13 @@
 
 </main>
 
+<!-- Leaflet before the app, so the app can see whether it arrived. `defer`
+     keeps it non-blocking and still ordered ahead of the module. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+        integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+        defer></script>
 <script type="module" src="js/app.js"></script>
 
 <footer class="footer">

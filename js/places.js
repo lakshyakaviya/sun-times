@@ -15,6 +15,7 @@ import { isValidTimeZone, viewerTimeZone } from './time.js';
 
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+const REVERSE_GEOCODE_URL = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
 
 /** Shorter than this and the search is all noise. */
 export const MIN_QUERY_LENGTH = 2;
@@ -37,6 +38,29 @@ export class PlacesError extends Error {
  * ------------------------------------------------------------------ */
 
 /**
+ * A region line, with the blanks and the echoes taken out.
+ *
+ * "Singapore, Singapore" tells the reader nothing the name did not, and
+ * neither does a subdivision that repeats the city. An empty result is fine —
+ * a city-state needs no region.
+ */
+function buildRegion(name, ...parts) {
+  const seen = new Set([name.trim().toLowerCase()]);
+  const kept = [];
+
+  for (const part of parts) {
+    const value = typeof part === 'string' ? part.trim() : '';
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(value);
+  }
+
+  return kept.join(', ');
+}
+
+/**
  * One geocoding hit into the shape the app passes around.
  * Returns `null` for an entry too broken to use, so one bad row in an
  * otherwise good response does not throw the whole list away.
@@ -51,9 +75,8 @@ function toPlace(entry) {
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
 
   // Country-level entries (searching "Singapore") carry no admin1 at all.
-  const region = [entry.admin1, entry.country]
-    .filter((part) => typeof part === 'string' && part.trim())
-    .join(', ');
+  const name = entry.name.trim();
+  const region = buildRegion(name, entry.admin1, entry.country);
 
   // An unrecognised zone name is treated as no zone: the sun math falls back
   // to anchoring on longitude and the UI says times are in the viewer's zone,
@@ -61,7 +84,7 @@ function toPlace(entry) {
   const zone = isValidTimeZone(entry.timezone) ? entry.timezone : null;
 
   return {
-    name: entry.name.trim(),
+    name,
     region,
     lat,
     lon,
@@ -129,6 +152,30 @@ export function parseTimeZoneResponse(payload) {
   const zone = payload && typeof payload === 'object' ? payload.timezone : null;
   if (typeof zone === 'string' && isValidTimeZone(zone)) return zone;
   throw new PlacesError('malformed', 'The time zone lookup sent something unexpected.');
+}
+
+/**
+ * A reverse-geocoding response into a name and a region, either of which may
+ * be empty — the caller decides what to show instead.
+ *
+ * Absent values arrive as empty strings rather than null or a missing key, so
+ * everything here has to test for content, not presence. `city` is empty well
+ * away from towns, but `locality` often still carries something useful: a
+ * point in the middle of the Pacific comes back as "Tuamotus".
+ *
+ * @param {unknown} payload
+ * @returns {{name: string, region: string}}
+ */
+export function parseReverseGeocodeResponse(payload) {
+  if (!payload || typeof payload !== 'object') return { name: '', region: '' };
+
+  const filled = (value) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+
+  const name = filled(payload.city) || filled(payload.locality);
+  return {
+    name,
+    region: buildRegion(name, payload.principalSubdivision, payload.countryName),
+  };
 }
 
 /** A geolocation PositionError into one of ours. */
@@ -229,6 +276,28 @@ export async function resolveTimeZone(lat, lon, { signal } = {}) {
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
     return { timeZone: viewerTimeZone(), guessed: true };
+  }
+}
+
+/**
+ * What a pair of coordinates is called.
+ *
+ * Never throws for a failed lookup: an empty name is a perfectly good answer
+ * (the caller falls back to the coordinates themselves), and a name is a
+ * nicety rather than something the app depends on. Only an abort propagates.
+ *
+ * @returns {Promise<{name: string, region: string}>}
+ */
+export async function describePlace(lat, lon, { signal } = {}) {
+  const url =
+    `${REVERSE_GEOCODE_URL}?latitude=${lat.toFixed(5)}&longitude=${lon.toFixed(5)}` +
+    `&localityLanguage=en`;
+
+  try {
+    return parseReverseGeocodeResponse(await fetchJson(url, { signal }));
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    return { name: '', region: '' };
   }
 }
 

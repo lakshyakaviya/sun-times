@@ -291,14 +291,56 @@ input[type="search"]::placeholder { color: var(--text-muted); }
 .map {
   height: clamp(240px, 38vh, 380px);
   background: var(--surface-sunk);
-  /* Placeholder look until Leaflet mounts. */
-  display: grid;
-  place-items: center;
+  /* Leaflet positions its panes absolutely against this. */
+  position: relative;
 }
 
+/* Sits over the empty container until Leaflet mounts, and stays if it never
+   does. Absolute rather than a grid on .map, so it cannot interfere with
+   Leaflet's own layout. */
 .map__placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
   font-size: .88rem;
   color: var(--text-muted);
+}
+
+/* ---- Leaflet's own chrome, matched to the page ---- */
+
+.leaflet-container {
+  font: inherit;
+  background: var(--surface-sunk);
+}
+
+.leaflet-bar a,
+.leaflet-control-attribution {
+  color: #241f18;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Only the tiles, so the marker and controls keep their contrast. */
+  .leaflet-tile-pane {
+    filter: brightness(.82) saturate(.85);
+  }
+
+  .leaflet-control-attribution {
+    background: rgba(30, 32, 41, .85) !important;
+    color: var(--text-muted);
+  }
+  .leaflet-control-attribution a { color: var(--accent); }
+
+  .leaflet-bar a {
+    background: var(--surface);
+    color: var(--text);
+    border-bottom-color: var(--border);
+  }
+  .leaflet-bar a:hover { background: var(--surface-sunk); }
 }
 
 .map-hint {

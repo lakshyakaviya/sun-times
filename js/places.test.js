@@ -16,9 +16,11 @@
 import {
   parseSearchResponse,
   parseTimeZoneResponse,
+  parseReverseGeocodeResponse,
   fromGeolocationError,
   searchPlaces,
   resolveTimeZone,
+  describePlace,
   locate,
   PlacesError,
   MIN_QUERY_LENGTH,
@@ -87,6 +89,37 @@ const FORECAST = {
   elevation: 910.0,
   current_units: { time: 'iso8601', interval: 'seconds', temperature_2m: '°C' },
   current: { time: '2026-11-06T16:30', interval: 900, temperature_2m: 23.0 },
+};
+
+/* --- api.bigdatacloud.net reverse-geocode-client, localityInfo trimmed --- */
+
+/** A city centre. */
+const REVERSE_CITY = {
+  latitude: 12.9716, longitude: 77.5946, lookupSource: 'coordinates',
+  localityLanguageRequested: 'en',
+  continent: 'Asia', continentCode: 'AS',
+  countryName: 'India', countryCode: 'IN',
+  principalSubdivision: 'Karnataka', principalSubdivisionCode: 'IN-KA',
+  city: 'Bengaluru', locality: 'Bengaluru', postcode: '560001',
+};
+
+/** Open water: everything empty except a locality for the island group. */
+const REVERSE_OCEAN = {
+  latitude: -20, longitude: -140, lookupSource: 'coordinates',
+  localityLanguageRequested: 'en',
+  continent: '', continentCode: '',
+  countryName: '', countryCode: '',
+  principalSubdivision: '', principalSubdivisionCode: '',
+  city: '', locality: 'Tuamotus', postcode: '',
+};
+
+/** Antarctica: a country and a city, but no continent and no subdivision. */
+const REVERSE_ANTARCTICA = {
+  latitude: -77.85, longitude: 166.68, lookupSource: 'coordinates',
+  continent: '', continentCode: '',
+  countryName: 'Antarctica', countryCode: 'AQ',
+  principalSubdivision: '', principalSubdivisionCode: '',
+  city: 'McMurdo Station', locality: 'McMurdo Station', postcode: '',
 };
 
 /* ------------------------------------------------------------------ *
@@ -166,10 +199,11 @@ export async function runTests() {
     t.check('a query with no matches yields an empty list, not a crash',
       Array.isArray(none) && none.length === 0, `got ${JSON.stringify(none)}`);
 
-    // Country-level entries have no admin1.
+    // Country-level entries have no admin1, and a city-state's country just
+    // repeats its name — "Singapore, Singapore" says nothing twice.
     const singapore = parseSearchResponse(SINGAPORE);
-    t.equals('a place with no admin area still gets a region',
-      singapore[0].region, 'Singapore');
+    t.equals('a city-state does not repeat its own name as its region',
+      singapore[0].region, '');
 
     // Both Singapore rows would render identically; the city is what was meant.
     t.check('duplicate labels collapse to one entry',
@@ -319,6 +353,93 @@ export async function runTests() {
     );
     t.check('a nonsense zone also falls back rather than being passed on',
       badBody.guessed === true, `guessed=${badBody.guessed}`);
+  }
+
+  /* --- Naming a pair of coordinates -------------------------------- */
+
+  t.group('Reading the reverse-geocoding response');
+  {
+    const city = parseReverseGeocodeResponse(REVERSE_CITY);
+    t.equals('a city centre gets its name', city.name, 'Bengaluru');
+    t.equals('and its subdivision and country', city.region, 'Karnataka, India');
+
+    // Absent values arrive as empty strings, not null or a missing key.
+    const ocean = parseReverseGeocodeResponse(REVERSE_OCEAN);
+    t.equals('open water falls back to the locality', ocean.name, 'Tuamotus');
+    t.equals('with no region to show', ocean.region, '');
+
+    const antarctica = parseReverseGeocodeResponse(REVERSE_ANTARCTICA);
+    t.equals('a station in Antarctica is named', antarctica.name, 'McMurdo Station');
+    t.equals('its country stands in for a subdivision', antarctica.region, 'Antarctica');
+
+    // A region repeating the name reads as "Singapore, Singapore".
+    const cityState = parseReverseGeocodeResponse({
+      city: 'Singapore', locality: 'Singapore',
+      principalSubdivision: 'Singapore', countryName: 'Singapore',
+    });
+    t.equals('a region echoing the name is dropped rather than repeated',
+      cityState.region, '');
+    t.check('and the name survives', cityState.name === 'Singapore', cityState.name);
+
+    // A subdivision that repeats the city, with a real country behind it.
+    const sameNamed = parseReverseGeocodeResponse({
+      city: 'Luxembourg', locality: 'Luxembourg',
+      principalSubdivision: 'Luxembourg', countryName: 'Luxembourg',
+    });
+    t.equals('duplicates collapse even when there are three of them',
+      sameNamed.region, '');
+
+    const mexico = parseReverseGeocodeResponse({
+      city: 'Mexico City', principalSubdivision: 'Mexico City', countryName: 'Mexico',
+    });
+    t.equals('a genuine country still shows behind a repeated subdivision',
+      mexico.region, 'Mexico');
+
+    for (const [label, payload] of [
+      ['an entirely empty body', {}],
+      ['every field blank', { city: '', locality: '', countryName: '', principalSubdivision: '' }],
+      ['null', null],
+      ['a string', 'nope'],
+      ['whitespace only', { city: '   ', locality: '  ' }],
+    ]) {
+      const got = parseReverseGeocodeResponse(payload);
+      t.check(`${label} yields an empty name rather than throwing`,
+        got.name === '' && got.region === '', JSON.stringify(got));
+    }
+  }
+
+  t.group('Naming coordinates over a stubbed network');
+  {
+    let url = '';
+    const named = await withStubbedFetch(
+      async (requested) => { url = String(requested); return jsonResponse(REVERSE_CITY); },
+      () => describePlace(12.9716, 77.5946)
+    );
+    t.equals('a successful lookup returns the name', named.name, 'Bengaluru');
+    t.check('the request carries the coordinates and asks for English',
+      url.includes('latitude=12.97160') && url.includes('localityLanguage=en'), url);
+
+    // A name is a nicety; the app must not break without one.
+    for (const [label, stub] of [
+      ['the service is unreachable', async () => { throw new TypeError('Failed to fetch'); }],
+      ['the service errors', async () => jsonResponse({}, 503)],
+      ['the body is unreadable', async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('x'); } })],
+    ]) {
+      const result = await withStubbedFetch(stub, () => describePlace(0, 0));
+      t.check(`${label} → an empty name, not an error`,
+        result.name === '' && result.region === '', JSON.stringify(result));
+    }
+
+    // But an abort still has to propagate, or a stale pick could win.
+    let abortError = null;
+    await withStubbedFetch(
+      async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; },
+      async () => {
+        try { await describePlace(0, 0); } catch (error) { abortError = error; }
+      }
+    );
+    t.check('an abort propagates rather than being swallowed',
+      abortError?.name === 'AbortError', `got ${abortError?.name ?? 'nothing'}`);
   }
 
   /* --- Geolocation ------------------------------------------------- */
