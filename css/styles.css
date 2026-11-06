@@ -15,7 +15,11 @@
   --surface:      #fffdf8;
   --surface-sunk: #f0ebe0;
   --text:         #241f18;
-  --text-muted:   #6c6256;
+  /* Dark enough to hold up on the sky gradient, not only on a panel. The
+     masthead tagline is the only text sitting on the sky, where the backdrop
+     starts at #bcd4f2 rather than the near-white page background — the
+     lighter #6c6256 this replaces measured 3.93:1 there, under AA. */
+  --text-muted:   #5a5147;
   --border:       #e0d8c8;
   --accent:       var(--amber-deep);
   --accent-ink:   #4a2a08;
