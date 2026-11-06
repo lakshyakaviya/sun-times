@@ -92,7 +92,7 @@ validated and a damaged row is dropped while the rest are kept.
 
 ### Files
 
-```
+```text
 index.html          markup
 css/styles.css      tokens, light + dark, responsive
 js/sun.js           the solar algorithm (pure, no DOM, no network)
@@ -130,6 +130,25 @@ array, a city-state carries no `admin1`, and the reverse geocoder returns empty
 strings rather than nulls — so presence checks would have accepted nothing at
 all.
 
+## Accessibility
+
+Light and dark are both first-class, and every colour pairing the page makes
+has been measured against WCAG AA — 44 of them, at the threshold for each one's
+size, weight and whether it is text at all. Several needed changing to get
+there: links and focus rings no longer share a token with the primary button's
+fill (a mid amber is fine as a fill and reads at 2.85:1 as body text), `--rose`
+is theme-specific because no single red clears both a white and a dark panel,
+and form fields have their own stronger border, since the edge that tells you
+something is a text field owes 3:1 while a panel edge is only decoration.
+
+The tightest pairings are the footer link at 4.85:1 and the dark-mode masthead
+tagline at 4.71:1.
+
+**Known follow-up:** the footer links in light mode have been measured at
+4.85:1 but not yet confirmed by eye. They are the smallest text on the page
+(13px) in the deepest accent colour, so they are the most likely place for the
+numbers to be right and the result still to read poorly.
+
 ## Publishing to GitHub Pages
 
 It is a static site, so this is the whole job:
@@ -147,7 +166,7 @@ gh api -X POST repos/:owner/sun-times/pages \
 
 Use the branch you actually pushed — `git branch --show-current` will say. (Or
 in the repository on github.com: **Settings → Pages → Deploy from a branch →
-<branch> / (root)**.)
+that branch / (root)**.)
 
 The site appears at `https://<user>.github.io/sun-times/` within a minute or
 so. Geolocation needs a secure origin, which Pages provides; it will not work
