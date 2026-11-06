@@ -147,12 +147,10 @@ and form fields have their own stronger border, since the edge that tells you
 something is a text field owes 3:1 while a panel edge is only decoration.
 
 The tightest pairings are the footer link at 4.85:1 and the dark-mode masthead
-tagline at 4.71:1.
-
-**Known follow-up:** the footer links in light mode have been measured at
-4.85:1 but not yet confirmed by eye. They are the smallest text on the page
-(13px) in the deepest accent colour, so they are the most likely place for the
-numbers to be right and the result still to read poorly.
+tagline at 4.71:1. Both have also been checked by eye in Chrome — the footer
+links are the smallest text on the page (13px) in the deepest accent colour,
+which made them the likeliest place for the numbers to be right and the result
+still to read poorly. They read fine.
 
 ## Publishing to GitHub Pages
 
