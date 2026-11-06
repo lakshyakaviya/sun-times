@@ -161,7 +161,7 @@ Then turn Pages on, pointing at the root of the default branch:
 
 ```sh
 gh api -X POST repos/:owner/sun-times/pages \
-  -f 'source[branch]=master' -f 'source[path]=/'
+  -f 'source[branch]=main' -f 'source[path]=/'
 ```
 
 Use the branch you actually pushed — `git branch --show-current` will say. (Or
