@@ -4,13 +4,13 @@
  * ------------------------------------------------------------------ */
 
 :root {
-  /* Palette: warm sun over a cool sky. */
+  /* Palette. The same three in both themes; what changes below is which of
+     them the semantic tokens point at. */
   --amber:        #f6a03a;
   --amber-deep:   #d9752a;
   --rose:         #e4624f;
-  --indigo:       #3b4a7a;
-  --indigo-deep:  #1d2440;
 
+  /* Semantic tokens. Every one of these has a dark counterpart. */
   --bg:           #f4f1ea;
   --surface:      #fffdf8;
   --surface-sunk: #f0ebe0;
@@ -274,6 +274,13 @@ input[type="search"]::placeholder { color: var(--text-muted); }
   justify-content: space-between;
 }
 
+/* The meta line can run long — region, coordinates and zone — so let it take
+   the room it needs and wrap, rather than squeezing the date controls. */
+.place__identity {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
 .place__name { font-size: clamp(1.2rem, 3.5vw, 1.6rem); letter-spacing: -.01em; }
 .place__meta { margin-top: .2rem; color: var(--text-muted); font-size: .88rem; }
 
@@ -283,6 +290,10 @@ input[type="search"]::placeholder { color: var(--text-muted); }
   gap: .35rem;
   flex-wrap: wrap;
 }
+
+/* A date field has a wide intrinsic minimum of its own; without this it
+   refuses to shrink and pushes the row sideways on a narrow screen. */
+.date-nav__input { min-width: 0; }
 
 /* ------------------------------------------------------------------ *
  * Map
@@ -491,5 +502,37 @@ input[type="search"]::placeholder { color: var(--text-muted); }
 @media (max-width: 34rem) {
   .picker__form { grid-template-columns: 1fr auto; }
   #locate-btn { grid-column: 1 / -1; justify-self: start; }
+
   .place { align-items: flex-start; }
+
+  /* The date row is four controls in about 300px, and a `type="date"` field
+     will not go below roughly 130px of its own. Left to wrap on its own it
+     drops whichever control happens not to fit, so place them explicitly
+     instead: the stepper on one row, "Today" under it. */
+  .date-nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  #today-btn { grid-column: 1 / -1; justify-self: start; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Input modes
+ * ------------------------------------------------------------------ */
+
+/* Fingers, not pointers. The arrows and the chip buttons are small on
+   purpose at the desk, and too small to hit on a phone. */
+@media (pointer: coarse) {
+  .btn { min-height: 2.75rem; }
+  .saved__chip-go,
+  .saved__chip-remove { min-height: 2.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+  .btn:active:not(:disabled) { transform: none; }
 }

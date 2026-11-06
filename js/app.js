@@ -326,6 +326,9 @@ function togglePin() {
 
   if (state.saved.some((entry) => samePlace(entry, place))) {
     state.saved = removeSavedPlace(state.saved, place);
+    // Clear first: a "the row is full" warning from a moment ago is answered
+    // by this very click, and must not be left standing.
+    setStatus('');
     persistSaved();
     renderSaved();
     return;
@@ -343,6 +346,7 @@ function togglePin() {
   }
 
   state.saved = places;
+  setStatus('');
   persistSaved();
   renderSaved();
 }

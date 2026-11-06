@@ -1,0 +1,4 @@
+# Normalise line endings in the repository to LF, whatever the working copy
+# uses. Without this, committing from Windows warns on every file and the
+# same content can look changed on another machine.
+* text=auto eol=lf

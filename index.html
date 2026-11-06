@@ -72,7 +72,7 @@
 
   <!-- Leaflet mounts into #map; the placeholder shows until it does, and
        stays with a message if the library never arrives. -->
-  <section class="panel panel--flush map-panel" aria-label="Map">
+  <section class="panel panel--flush" aria-label="Map">
     <div class="map" id="map" aria-describedby="map-hint">
       <p class="map__placeholder" id="map-placeholder">Loading the map…</p>
     </div>
@@ -127,15 +127,6 @@
 
 </main>
 
-<!-- Leaflet before the app, so the app can see whether it arrived. `defer`
-     keeps it non-blocking and still ordered ahead of the module. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
-        integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
-        crossorigin="anonymous"
-        referrerpolicy="no-referrer"
-        defer></script>
-<script type="module" src="js/app.js"></script>
-
 <footer class="footer">
   <p>
     Sun times computed in your browser with the NOAA solar algorithm — no sunrise API, no tracking.
@@ -145,6 +136,15 @@
     Map data © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors
   </p>
 </footer>
+
+<!-- Leaflet before the app, so the app can see whether it arrived. `defer`
+     keeps it non-blocking and still ordered ahead of the module. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+        integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+        defer></script>
+<script type="module" src="js/app.js"></script>
 
 </body>
 </html>
